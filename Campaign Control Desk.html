@@ -1,0 +1,788 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Campaign Control Desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: slim header with role + AI controls, a metrics rail, tabbed views (board / queue / exceptions / audit / rules), and a sticky detail panel for the selected campaign. */
+:root{
+  --font-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --font-body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --bg:#EFF2F6; --surface:#FFFFFF; --sunken:#E5E9F0; --ink:#111A2C; --ink-2:#4B5870; --line:#D2D9E4;
+  --accent:#1F4FD8; --accent-ink:#FFFFFF; --accent-bg:#E4EBFC;
+  --ok:#17794A; --ok-bg:#DDF2E6; --warn:#9A5B06; --warn-bg:#FBEBCF; --crit:#B3261E; --crit-bg:#FBE0DD;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B111C; --surface:#121A29; --sunken:#0E1522; --ink:#E6ECF7; --ink-2:#97A5BE; --line:#243049;
+    --accent:#7F9DFF; --accent-ink:#0B1330; --accent-bg:#1A2650;
+    --ok:#5ECB93; --ok-bg:#12301F; --warn:#E3A647; --warn-bg:#35260D; --crit:#F27B72; --crit-bg:#3A1714;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B111C; --surface:#121A29; --sunken:#0E1522; --ink:#E6ECF7; --ink-2:#97A5BE; --line:#243049;
+  --accent:#7F9DFF; --accent-ink:#0B1330; --accent-bg:#1A2650;
+  --ok:#5ECB93; --ok-bg:#12301F; --warn:#E3A647; --warn-bg:#35260D; --crit:#F27B72; --crit-bg:#3A1714;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:14px; line-height:1.5;
+  padding-block:20px 56px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.app{max-width:1360px; margin:0 auto; display:flex; flex-direction:column; gap:18px}
+button,select,input,textarea{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.mono{font-family:var(--font-mono); font-size:12px; font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-2)}
+
+/* header */
+.top{display:flex; flex-wrap:wrap; gap:14px 24px; align-items:flex-end; justify-content:space-between}
+h1{font-family:var(--font-display); font-weight:700; font-size:28px; line-height:1.1; margin:0 0 4px; letter-spacing:-.01em; text-wrap:balance}
+.sub{margin:0; color:var(--ink-2); display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center}
+.badge{font-family:var(--font-mono); font-size:11px; padding:2px 8px; border:1px dashed var(--ink-2); border-radius:4px; color:var(--ink-2)}
+.controls{display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end}
+.controls label{display:flex; flex-direction:column; gap:3px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-2)}
+select,input[type=text],input[type=date],textarea{
+  background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 10px; min-width:0; width:100%;
+}
+.controls select{width:auto; text-transform:none; letter-spacing:0; font-size:14px; color:var(--ink)}
+textarea{resize:vertical}
+.btn{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:7px 12px; cursor:pointer; font-weight:500}
+.btn:hover:not(:disabled){border-color:var(--ink-2)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.btn.primary:hover:not(:disabled){filter:brightness(1.08)}
+.btn.danger{color:var(--crit); border-color:var(--crit)}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+
+/* metrics */
+.metrics{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); background:var(--surface); border:1px solid var(--line); border-radius:8px}
+.metric{padding:14px 16px; display:flex; flex-direction:column; gap:2px; min-width:0; border-left:1px solid var(--line)}
+.metric:first-child{border-left:0}
+.metric .k{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-2)}
+.metric .v{font-family:var(--font-display); font-size:28px; font-weight:700; line-height:1.15; font-variant-numeric:tabular-nums}
+.metric .v small{font-size:14px; font-weight:500; color:var(--ink-2); margin-left:3px}
+.metric .n{font-size:12px; color:var(--ink-2)}
+.metric.bad .v{color:var(--crit)}
+@media (max-width:700px){ .metric:nth-child(odd){border-left:0} .metric{border-top:1px solid var(--line)} .metric:nth-child(-n+2){border-top:0} }
+
+/* tabs */
+.tabs{display:flex; flex-wrap:wrap; gap:4px; border-bottom:1px solid var(--line)}
+.tab{background:none; border:0; border-bottom:2px solid transparent; padding:9px 14px; margin-bottom:-1px; cursor:pointer; color:var(--ink-2); font-weight:500}
+.tab[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--accent)}
+.tab .count{font-family:var(--font-mono); font-size:11px; background:var(--sunken); border-radius:10px; padding:1px 7px; margin-left:6px; color:var(--ink-2)}
+
+/* workspace */
+.workspace{display:grid; grid-template-columns:minmax(0,1fr); gap:18px; align-items:start}
+.workspace.has-detail{grid-template-columns:minmax(0,1fr) minmax(360px,440px)}
+@media (max-width:1040px){ .workspace.has-detail{grid-template-columns:minmax(0,1fr)} }
+#detail{position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto}
+@media (max-width:1040px){ #detail{position:static; max-height:none} }
+main{min-width:0}
+
+/* board */
+.board{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px}
+.workspace.has-detail .board{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.col{background:var(--sunken); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:8px; min-width:0}
+.col-h{display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:2px 2px 4px}
+.col-h b{font-family:var(--font-display); font-size:15px}
+.col-h .who{font-size:11px; color:var(--ink-2)}
+.col-empty{font-size:12px; color:var(--ink-2); padding:8px 2px}
+.card{
+  text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:7px; padding:11px 12px; cursor:pointer;
+  display:flex; flex-direction:column; gap:4px; width:100%; min-width:0;
+}
+.card:hover{border-color:var(--ink-2)}
+.card.sel{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent)}
+.card-top,.card-foot{display:flex; justify-content:space-between; gap:8px; align-items:center}
+.card-title{font-family:var(--font-display); font-weight:700; font-size:16px; line-height:1.2}
+.card-sub{font-size:12px; color:var(--ink-2); overflow-wrap:anywhere}
+.due{font-family:var(--font-mono); font-size:12px; color:var(--ink-2)}
+.due.warn{color:var(--warn)} .due.bad{color:var(--crit); font-weight:500}
+.chip{font-size:11px; padding:1px 7px; border-radius:4px; background:var(--sunken); color:var(--ink-2); white-space:nowrap}
+.pill{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; padding:2px 8px; border-radius:4px; white-space:nowrap}
+.tone-accent{background:var(--accent-bg); color:var(--accent)}
+.tone-ok{background:var(--ok-bg); color:var(--ok)}
+.tone-warn{background:var(--warn-bg); color:var(--warn)}
+.tone-crit{background:var(--crit-bg); color:var(--crit)}
+.tone-muted{background:var(--sunken); color:var(--ink-2)}
+
+/* generic panels / lists */
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px; display:flex; flex-direction:column; gap:16px; min-width:0}
+.panel h2,.panel h3{font-family:var(--font-display); margin:0; line-height:1.2}
+.panel h2{font-size:20px}
+.panel h3{font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-2); font-family:var(--font-body); font-weight:600}
+.sec{display:flex; flex-direction:column; gap:8px}
+.row-head{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
+dl{display:grid; grid-template-columns:auto minmax(0,1fr); gap:5px 14px; margin:0}
+dt{color:var(--ink-2)} dd{margin:0; overflow-wrap:anywhere}
+.stepper{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(5,1fr); gap:4px}
+.stepper li{font-size:11px; color:var(--ink-2); display:flex; flex-direction:column; gap:5px; border-top:3px solid var(--line); padding-top:5px}
+.stepper li.done{border-top-color:var(--ok); color:var(--ink)}
+.stepper li.cur{border-top-color:var(--accent); color:var(--ink); font-weight:600}
+.stepper li.stuck{border-top-color:var(--crit); color:var(--crit); font-weight:600}
+.checks{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.checks li{display:grid; grid-template-columns:18px minmax(0,1fr); gap:8px; align-items:start}
+.mark{width:16px; height:16px; border-radius:50%; margin-top:2px; display:grid; place-items:center; font-size:10px; font-weight:700; line-height:1}
+.mark.ok{background:var(--ok-bg); color:var(--ok)} .mark.bad{background:var(--crit-bg); color:var(--crit)}
+.checks .d{font-family:var(--font-mono); font-size:11px; color:var(--ink-2)}
+.draft{background:var(--sunken); border-radius:6px; padding:12px; display:flex; flex-direction:column; gap:8px}
+.draft .hl{font-family:var(--font-display); font-weight:700; font-size:18px; line-height:1.2}
+.draft p{margin:0}
+.draft .disc{font-size:12px; color:var(--ink-2); border-top:1px solid var(--line); padding-top:8px}
+.code{font-family:var(--font-mono); font-size:11px; background:var(--sunken); padding:10px; border-radius:6px; overflow-x:auto; white-space:pre; margin:8px 0 0}
+details summary{cursor:pointer; color:var(--ink-2); font-size:12px}
+.field{display:flex; flex-direction:column; gap:4px}
+.field label{font-size:12px; color:var(--ink-2)}
+.actions{display:flex; flex-wrap:wrap; gap:8px}
+.hint{font-size:12px; color:var(--ink-2)}
+.log{list-style:none; margin:0; padding:0; display:flex; flex-direction:column}
+.log li{display:grid; grid-template-columns:96px minmax(0,1fr); gap:10px; padding:8px 0; border-top:1px solid var(--line)}
+.log li:first-child{border-top:0}
+.log .t{font-family:var(--font-mono); font-size:11px; color:var(--ink-2)}
+.log .a{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; margin-right:6px}
+.a.k-ai{color:var(--accent)} .a.k-human{color:var(--ok)} .a.k-system{color:var(--ink-2)} .a.k-denied{color:var(--crit)}
+.log .tr{font-family:var(--font-mono); font-size:11px; color:var(--ink-2)}
+
+/* tables & lists */
+.tw{overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:8px}
+table{border-collapse:collapse; width:100%; min-width:640px}
+th,td{text-align:left; padding:9px 12px; border-top:1px solid var(--line); vertical-align:top}
+thead th{border-top:0; font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-2); background:var(--sunken); font-weight:600}
+tbody tr.clickable{cursor:pointer} tbody tr.clickable:hover{background:var(--sunken)}
+.list{display:flex; flex-direction:column; gap:8px}
+.item{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 14px; align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px 14px; text-align:left; width:100%; cursor:pointer}
+.item:hover{border-color:var(--ink-2)}
+.item .l{display:flex; flex-direction:column; gap:2px; min-width:0}
+.item .l b{font-family:var(--font-display); font-size:16px}
+.item .r{display:flex; flex-direction:column; align-items:flex-end; gap:4px}
+.empty{background:var(--surface); border:1px dashed var(--line); border-radius:8px; padding:28px 18px; color:var(--ink-2); text-align:center}
+.filter{display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap}
+.filter select{width:auto}
+.two{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px}
+.two .panel{gap:8px}
+.two ul{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px}
+footer{display:flex; flex-wrap:wrap; gap:8px 16px; justify-content:space-between; color:var(--ink-2); font-size:12px}
+.linkbtn{background:none; border:0; padding:0; color:var(--accent); cursor:pointer; text-decoration:underline; font-size:12px}
+
+/* dialog + toast */
+.overlay{position:fixed; inset:0; background:rgba(8,12,22,.55); display:grid; place-items:center; padding:16px; z-index:30; overflow:auto}
+.dialog{background:var(--surface); border:1px solid var(--line); border-radius:10px; width:100%; max-width:560px; padding:20px; display:flex; flex-direction:column; gap:14px}
+.dialog h2{font-family:var(--font-display); margin:0; font-size:22px}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px}
+.err{color:var(--crit); font-size:13px; min-height:1em}
+.toast{
+  position:fixed; left:max(16px, env(safe-area-inset-left, 0px)); bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+  background:var(--ink); color:var(--bg); padding:10px 14px; border-radius:6px; max-width:min(520px, calc(100vw - 32px));
+  font-size:13px; z-index:40; opacity:0; pointer-events:none; transition:opacity .15s;
+}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){ .toast{transition:none} }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Campaign Control Desk</h1>
+      <p class="sub">Property campaign workflow, brief to delivery <span class="badge">Synthetic data · AI and connectors are stubs</span></p>
+    </div>
+    <div class="controls">
+      <label for="role">Acting as
+        <select id="role">
+          <option value="am">Account manager</option>
+          <option value="cw">Copywriter</option>
+          <option value="client">Client contact</option>
+        </select>
+      </label>
+      <label for="aimode">AI behaviour
+        <select id="aimode">
+          <option value="ok">Valid output</option>
+          <option value="once">Invalid once, then valid</option>
+          <option value="always">Always invalid</option>
+        </select>
+      </label>
+      <button class="btn" type="button" data-act="sweep">Run deadline sweep</button>
+      <button class="btn primary" type="button" data-act="newbrief">New brief</button>
+    </div>
+  </header>
+
+  <section id="metrics" class="metrics" aria-label="Operational metrics"></section>
+  <nav id="tabs" class="tabs" role="tablist" aria-label="Views"></nav>
+
+  <div id="ws" class="workspace">
+    <main id="view"></main>
+    <aside id="detail" hidden aria-label="Campaign detail"></aside>
+  </div>
+
+  <footer>
+    <span>State, rules and audit history live in this page only. Nothing is sent to a real portal, model or client.</span>
+    <button class="linkbtn" type="button" data-act="reset">Reset demo data</button>
+  </footer>
+</div>
+
+<div id="dlg" class="overlay" hidden>
+  <form id="briefform" class="dialog" novalidate>
+    <h2>New campaign brief</h2>
+    <p class="hint" style="margin:0">Only project, client and channel are needed to create the record. Anything missing sends it to Needs info instead of the AI step.</p>
+    <div class="grid2">
+      <div class="field"><label for="f-project">Project name</label><input type="text" id="f-project" autocomplete="off" placeholder="Willow Crest"></div>
+      <div class="field"><label for="f-client">Client (developer)</label><input type="text" id="f-client" list="clients" autocomplete="off" placeholder="Northgate Developers"><datalist id="clients"></datalist></div>
+      <div class="field"><label for="f-channel">Channel</label>
+        <select id="f-channel"><option>Brochure (8 pages)</option><option>Portal listing</option><option>Social carousel (6 cards)</option></select></div>
+      <div class="field"><label for="f-locality">Locality</label><input type="text" id="f-locality" autocomplete="off" placeholder="Sector 76, Noida"></div>
+      <div class="field"><label for="f-rera">RERA registration number</label><input type="text" id="f-rera" autocomplete="off" placeholder="Required on every advertisement"></div>
+      <div class="field"><label for="f-deadline">Delivery deadline</label><input type="date" id="f-deadline"></div>
+    </div>
+    <div class="field"><label for="f-highlights">Key features, comma separated (at least 3)</label>
+      <textarea id="f-highlights" rows="3" placeholder="3 and 4 BHK homes, a 2-acre central park, a 10-minute walk to the metro"></textarea></div>
+    <div id="form-err" class="err" role="alert"></div>
+    <div class="actions" style="justify-content:flex-end">
+      <button class="btn" type="button" data-act="closeform">Cancel</button>
+      <button class="btn primary" type="submit">Submit brief</button>
+    </div>
+  </form>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+var H = 3600e3, D = 24*H;
+var MAX_ATTEMPTS = 3;
+var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; }); };
+var $ = function(id){ return document.getElementById(id); };
+
+var ROLES = { am:'Account manager', cw:'Copywriter', client:'Client contact', ai:'AI drafting', sys:'System' };
+var STATES = {
+  received:  { label:'Received',         tone:'muted',  who:'System' },
+  needs_info:{ label:'Needs info',       tone:'warn',   who:'Waiting on account manager' },
+  drafting:  { label:'AI drafting',      tone:'accent', who:'System' },
+  review:    { label:'Internal review',  tone:'accent', who:'Copywriter or account manager' },
+  client:    { label:'Client approval',  tone:'accent', who:'Client contact' },
+  ready:     { label:'Ready to deliver', tone:'ok',     who:'Account manager' },
+  delivered: { label:'Delivered',        tone:'muted',  who:'Complete' },
+  escalated: { label:'Escalated',        tone:'crit',   who:'Account manager' }
+};
+var BOARD = ['needs_info','review','client','ready','escalated','delivered'];
+var STEPS = ['Intake','Draft','Review','Client','Deliver'];
+var STEP_OF = { received:0, needs_info:0, drafting:1, review:2, client:3, ready:4, delivered:5 };
+
+/* Transition table: this is the single source of truth for both behaviour and the Rules tab. */
+var T = [
+  { from:'needs_info', action:'supply_info',      label:'Submit missing info',     roles:['am'],       to:'drafting',  guard:'Brief passes validation' },
+  { from:'review',     action:'approve_internal', label:'Approve for client',      roles:['am','cw'],  to:'client',    guard:'Draft passes every copy check' },
+  { from:'review',     action:'changes_internal', label:'Send back to AI',         roles:['am','cw'],  to:'drafting',  guard:'Note is required', note:true },
+  { from:'client',     action:'client_approve',   label:'Approve',                 roles:['client'],   to:'ready',     guard:'Draft passes every copy check' },
+  { from:'client',     action:'client_changes',   label:'Request changes',         roles:['client'],   to:'drafting',  guard:'Note is required', note:true },
+  { from:'ready',      action:'deliver',          label:'Deliver via connector',   roles:['am'],       to:'delivered', guard:'Idempotency key not already used' },
+  { from:'escalated',  action:'resume',           label:'Resume previous stage',   roles:['am'],       to:'previous stage', guard:'A previous stage was recorded' },
+  { from:'escalated',  action:'rerun_ai',         label:'Re-run AI draft',         roles:['am'],       to:'drafting',  guard:'Attempt counter resets to zero' },
+  { from:'escalated',  action:'take_over',        label:'Draft manually',          roles:['am','cw'],  to:'review',    guard:'Empty draft must pass checks before approval' }
+];
+var SYS_RULES = [
+  ['Intake', 'Brief received', 'Project, client and channel present. Same client, project and channel not already open.', 'Needs info, or AI drafting'],
+  ['AI drafting', 'Draft generated, up to 3 attempts', 'Structured output must pass every copy check.', 'Internal review, retry, or Escalated'],
+  ['Any open stage', 'Deadline sweep', 'Deadline has passed and the campaign is not delivered.', 'Escalated']
+];
+
+var ui = { tab:'pipeline', sel:null, role:'am', aiMode:'ok', logFilter:'all' };
+var DB = [];
+var seq = 108;
+
+/* ---------- helpers ---------- */
+function now(){ return Date.now(); }
+function byId(id){ for (var i=0;i<DB.length;i++) if (DB[i].id===id) return DB[i]; return null; }
+function fmtDT(t){ return new Date(t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
+function dur(ms){
+  var a = Math.abs(ms), d = Math.floor(a/D), h = Math.floor((a%D)/H), m = Math.floor((a%H)/60000);
+  if (d>0) return d+'d '+h+'h';
+  if (h>0) return h+'h';
+  return m+'m';
+}
+function fmtRel(ts){ var d = ts-now(); return d>=0 ? 'due in '+dur(d) : dur(d)+' overdue'; }
+function isOpen(c){ return c.state!=='delivered'; }
+function isOverdue(c){ return isOpen(c) && c.deadline < now(); }
+function isAtRisk(c){ return isOpen(c) && c.deadline < now()+48*H; }
+function median(a){ if(!a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}), m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; }
+function toast(msg){
+  var el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(function(){ el.classList.remove('show'); }, 4200);
+}
+
+/* ---------- deterministic rules ---------- */
+function checkBrief(c){
+  var miss = [];
+  if (!c.locality.trim()) miss.push('locality');
+  if (!c.rera.trim() || c.rera.trim().length < 8) miss.push('RERA registration number');
+  if (c.highlights.length < 3) miss.push('at least 3 key features');
+  return miss;
+}
+function disclaimer(c, withRera){
+  return (withRera ? 'RERA Reg. No. '+c.rera+'. ' : '') + 'Images are indicative. Subject to approvals and availability.';
+}
+function generateDraft(c, bad){
+  var h = c.highlights, v = c.revisions % 3;
+  var headline = [
+    c.project+', '+c.locality,
+    c.project+': homes designed around daily ease',
+    'A closer look at '+c.project
+  ][v];
+  var body = c.project+' brings '+(h[0]||'thoughtful design')+' to '+(c.locality||'the neighbourhood')+'. Residents get '+(h[1]||'generous open space')+', along with '+(h[2]||'good connectivity')+'. Every detail has been planned for everyday ease, from the first arrival to the last light at night. Book a site visit with '+c.client+' to see the layout, the sample apartment and the amenity floor in person. Pricing, availability and payment plans are shared at the site office.';
+  if (bad) body += ' Guaranteed returns of 12% a year.';
+  return { headline:headline, body:body, highlights:h.slice(0,3), disclaimer:disclaimer(c, !bad), source: bad ? 'ai' : 'ai' };
+}
+function validateDraft(c){
+  var d = c.draft; if (!d) return [];
+  var words = d.body.trim() ? d.body.trim().split(/\s+/).length : 0;
+  var all = (d.headline+' '+d.body+' '+d.disclaimer).toLowerCase();
+  var assured = /\b(guaranteed|assured|risk[- ]free)\b/i.test(d.headline+' '+d.body);
+  return [
+    { label:'Headline is 70 characters or fewer', ok:d.headline.length>0 && d.headline.length<=70, detail:d.headline.length+' characters' },
+    { label:'Body is 50 to 110 words',           ok:words>=50 && words<=110,                      detail:words+' words' },
+    { label:'RERA number appears in the copy',   ok:!!c.rera && all.indexOf(c.rera.toLowerCase())>-1, detail:c.rera || 'no number on the brief' },
+    { label:'No assured-return claims',          ok:!assured,                                      detail: assured ? 'found: guaranteed / assured / risk-free' : 'none found' }
+  ];
+}
+function guardFail(c, t){
+  if (t.action==='approve_internal' || t.action==='client_approve'){
+    if (!c.checks.length || !c.checks.every(function(x){ return x.ok; })) return 'The draft fails one or more copy checks.';
+  }
+  return null;
+}
+
+/* ---------- audit + state machine ---------- */
+function log(c, actor, kind, from, to, msg, extra){
+  var e = { t:now(), actor:actor, kind:kind, from:from, to:to, msg:msg };
+  if (extra) for (var k in extra) e[k] = extra[k];
+  c.log.push(e);
+}
+function transition(c, to, actor, kind, msg){
+  var from = c.state; c.state = to; c.stateSince = now();
+  if (to==='ready') c.tReady = now();
+  log(c, actor, kind, from, to, msg);
+}
+function escalate(c, reason, prev){
+  c.prevState = prev || null; c.escReason = reason;
+  transition(c, 'escalated', 'sys', 'system', reason);
+}
+function aiShouldFail(c){
+  return ui.aiMode==='always' || (ui.aiMode==='once' && c.aiAttempts===1 && c.revisions===0);
+}
+function runDraft(c){
+  while (true){
+    c.aiAttempts++;
+    c.draft = generateDraft(c, aiShouldFail(c));
+    c.checks = validateDraft(c);
+    var ok = c.checks.every(function(x){ return x.ok; });
+    log(c, 'ai', 'ai', 'drafting', 'drafting',
+      'AI draft attempt '+c.aiAttempts+(ok ? ' passed all checks' : ' failed: '+c.checks.filter(function(x){return !x.ok;}).map(function(x){return x.label.toLowerCase();}).join('; ')),
+      { attempt:c.aiAttempts, ok:ok });
+    if (ok){ transition(c, 'review', 'sys', 'system', 'Draft routed to internal review'); return; }
+    if (c.aiAttempts >= MAX_ATTEMPTS){ escalate(c, 'AI output failed validation '+MAX_ATTEMPTS+' times', null); return; }
+    log(c, 'sys', 'system', 'drafting', 'drafting', 'Retrying (attempt '+(c.aiAttempts+1)+' of '+MAX_ATTEMPTS+')');
+  }
+}
+function perform(id, action, role, payload){
+  payload = payload || {};
+  var c = byId(id); if (!c) return;
+  var t = null; T.forEach(function(x){ if (x.from===c.state && x.action===action) t = x; });
+  if (!t){ toast('That action is not available in this state.'); return; }
+  if (t.roles.indexOf(role) < 0){
+    log(c, role, 'denied', c.state, c.state, 'Blocked: "'+t.label+'" is not permitted for '+ROLES[role]+'.');
+    toast(ROLES[role]+' cannot perform "'+t.label+'". The attempt was logged.'); renderAll(); return;
+  }
+  var g = guardFail(c, t);
+  if (g){ log(c, role, 'denied', c.state, c.state, 'Blocked: '+t.label+'. '+g); toast(g); renderAll(); return; }
+  var by = role;
+  switch (action){
+    case 'supply_info': {
+      if (payload.locality) c.locality = payload.locality.trim();
+      if (payload.rera) c.rera = payload.rera.trim();
+      if (payload.highlights) c.highlights = splitList(payload.highlights);
+      var miss = checkBrief(c);
+      if (miss.length){ log(c, by, 'human', c.state, c.state, 'Brief updated. Still missing: '+miss.join(', ')); toast('Still missing: '+miss.join(', ')); break; }
+      transition(c, 'drafting', by, 'human', 'Brief complete, starting AI draft');
+      runDraft(c); break;
+    }
+    case 'approve_internal': transition(c, 'client', by, 'human', 'Approved for client review'); break;
+    case 'client_approve': transition(c, 'ready', by, 'human', 'Client approved the copy'); break;
+    case 'changes_internal':
+    case 'client_changes': {
+      if (!payload.note || !payload.note.trim()){ toast('Add a note describing what should change.'); return; }
+      c.revisions++; c.aiAttempts = 0; c.lastNote = payload.note.trim();
+      transition(c, 'drafting', by, 'human', 'Changes requested: '+c.lastNote);
+      runDraft(c); break;
+    }
+    case 'deliver': {
+      var key = 'deliver:'+c.id+':r'+c.revisions;
+      if (c.deliveries.has(key)){ toast('Already delivered with key '+key+'. Nothing was sent again.'); return; }
+      c.deliveries.add(key);
+      transition(c, 'delivered', by, 'human', 'Delivered via portal connector (stub, no external call). Idempotency key '+key);
+      break;
+    }
+    case 'resume': {
+      var to = c.prevState || 'review';
+      c.escReason = null; transition(c, to, by, 'human', 'Resumed at '+STATES[to].label); break;
+    }
+    case 'rerun_ai': {
+      c.aiAttempts = 0; c.escReason = null;
+      transition(c, 'drafting', by, 'human', 'AI draft re-run requested'); runDraft(c); break;
+    }
+    case 'take_over': {
+      c.escReason = null;
+      c.draft = { headline:c.project, body:'', highlights:[], disclaimer:disclaimer(c, true), source:'human' };
+      c.checks = validateDraft(c);
+      transition(c, 'review', by, 'human', 'Drafting manually. Empty draft must pass checks before approval.'); break;
+    }
+  }
+  renderAll();
+}
+function saveEdit(id, headline, body){
+  var c = byId(id); if (!c || c.state!=='review' || (ui.role!=='am' && ui.role!=='cw')) return;
+  var before = c.draft.body.length;
+  c.draft.headline = headline.trim(); c.draft.body = body.trim(); c.draft.source = 'human';
+  c.checks = validateDraft(c);
+  var ok = c.checks.every(function(x){ return x.ok; });
+  log(c, ui.role, 'human', 'review', 'review', 'Edited draft ('+(c.draft.body.length-before>=0?'+':'')+(c.draft.body.length-before)+' characters). Checks '+(ok?'all pass':'still failing'));
+  toast(ok ? 'Saved. All checks pass.' : 'Saved. Some checks still fail.'); renderAll();
+}
+function sweep(){
+  var n = 0;
+  DB.forEach(function(c){
+    if (['delivered','escalated','drafting'].indexOf(c.state)<0 && c.deadline < now()){
+      escalate(c, 'Deadline passed before delivery', c.state); n++;
+    }
+  });
+  toast(n ? n+' campaign'+(n>1?'s':'')+' escalated to the account manager.' : 'Sweep finished. Nothing is past its deadline.');
+  renderAll();
+}
+function splitList(s){ return String(s).split(',').map(function(x){return x.trim();}).filter(Boolean); }
+
+/* ---------- intake ---------- */
+function createBrief(f){
+  var err = [];
+  if (!f.project.trim()) err.push('project name');
+  if (!f.client.trim()) err.push('client');
+  if (err.length) return 'Add the '+err.join(' and ')+' to create the record.';
+  var key = [f.client, f.project, f.channel].map(function(x){return x.trim().toLowerCase();}).join('|');
+  var dup = null;
+  DB.forEach(function(c){ if (isOpen(c) && c.key===key) dup = c; });
+  if (dup) return 'This is a duplicate of '+dup.id+' ('+STATES[dup.state].label+'). No new record was created.';
+  var dl = f.deadline ? new Date(f.deadline+'T18:00:00').getTime() : now()+5*D;
+  seq++;
+  var c = blank({ id:'CMP-'+seq, project:f.project.trim(), locality:f.locality.trim(), client:f.client.trim(), channel:f.channel, rera:f.rera.trim(), highlights:splitList(f.highlights), deadline:dl });
+  c.key = key; c.state = 'received';
+  log(c, 'sys', 'system', null, 'received', 'Brief received via form');
+  DB.push(c);
+  var miss = checkBrief(c);
+  if (miss.length){ transition(c, 'needs_info', 'sys', 'system', 'Brief incomplete: '+miss.join(', ')); }
+  else { transition(c, 'drafting', 'sys', 'system', 'Brief passed validation'); runDraft(c); }
+  ui.sel = c.id; ui.tab = 'pipeline';
+  return null;
+}
+function blank(o){
+  return { id:o.id, project:o.project, locality:o.locality, client:o.client, channel:o.channel, rera:o.rera, highlights:o.highlights,
+    deadline:o.deadline, created:o.created || now(), state:'received', stateSince:o.stateSince || now(), revisions:o.rev || 0, aiAttempts:0,
+    draft:null, checks:[], log:[], deliveries:new Set(), prevState:null, escReason:null, tReady:null, lastNote:'',
+    key:[o.client,o.project,o.channel].map(function(x){return x.trim().toLowerCase();}).join('|') };
+}
+
+/* ---------- seed data (synthetic) ---------- */
+function std(upTo, t){
+  t = t || {};
+  var e = [
+    [0,'sys','system',null,'received','Brief received via form'],
+    [0.1,'sys','system','received','drafting','Brief passed validation'],
+    [0.2,'ai','ai','drafting','drafting','AI draft attempt 1 passed all checks',1,true],
+    [0.2,'sys','system','drafting','review','Draft routed to internal review']
+  ];
+  if (upTo==='review') return e;
+  e.push([t.client!=null?t.client:6,'cw','human','review','client','Approved for client review']);
+  if (upTo==='client') return e;
+  e.push([t.ready!=null?t.ready:30,'client','human','client','ready','Client approved the copy']);
+  if (upTo==='ready') return e;
+  e.push([t.done!=null?t.done:40,'am','human','ready','delivered','Delivered via portal connector (stub, no external call)']);
+  return e;
+}
+function seedOne(o){
+  var c = blank({ id:o.id, project:o.project, locality:o.locality, client:o.client, channel:o.channel, rera:o.rera, highlights:o.highlights,
+    deadline:now()+o.dueH*H, created:now()-o.ageH*H, stateSince:now()-o.sinceH*H, rev:o.rev });
+  c.state = o.state; c.aiAttempts = o.attempts || 1; c.prevState = o.prev || null; c.escReason = o.esc || null;
+  o.ev.forEach(function(e){ c.log.push({ t:c.created+e[0]*H, actor:e[1], kind:e[2], from:e[3], to:e[4], msg:e[5], attempt:e[6], ok:e[7] }); });
+  if (o.draft !== false){ c.draft = generateDraft(c, !!o.bad); c.checks = validateDraft(c); }
+  var r = null; c.log.forEach(function(e){ if (e.to==='ready') r = e; }); c.tReady = r ? r.t : null;
+  if (o.state==='delivered') c.deliveries.add('deliver:'+c.id+':r'+c.revisions);
+  return c;
+}
+function seed(){
+  seq = 108; DB = [];
+  DB.push(seedOne({ id:'CMP-101', project:'Meridian Greens', locality:'Sector 150, Noida', client:'Northgate Developers', channel:'Brochure (8 pages)', rera:'UPRERA-DEMO-1041',
+    highlights:['3 and 4 BHK homes','a 2-acre central park','a 10-minute walk to the metro'], ageH:20, sinceH:18, dueH:72, state:'review', ev:std('review') }));
+  DB.push(seedOne({ id:'CMP-102', project:'The Aravali Residences', locality:'Dwarka Expressway, Gurugram', client:'Kestrel Estates', channel:'Portal listing', rera:'HRERA-DEMO-2207',
+    highlights:['2 and 3 BHK homes','a clubhouse with a lap pool','direct access to the expressway'], ageH:60, sinceH:7, dueH:30, state:'client', rev:1,
+    ev:std('review').concat([
+      [8,'am','human','review','drafting','Changes requested: lead with the expressway access'],
+      [8.1,'ai','ai','drafting','drafting','AI draft attempt 1 passed all checks',1,true],
+      [8.1,'sys','system','drafting','review','Draft routed to internal review'],
+      [53,'cw','human','review','client','Approved for client review']]) }));
+  DB.push(seedOne({ id:'CMP-103', project:'Palm Court Villas', locality:'Greater Noida West', client:'Northgate Developers', channel:'Social carousel (6 cards)', rera:'UPRERA-DEMO-1388',
+    highlights:['independent 4 BHK villas','a private garden for every plot','a gated entry with 24-hour security'], ageH:120, sinceH:3, dueH:20, state:'ready', ev:std('ready',{client:20,ready:117}) }));
+  DB.push(seedOne({ id:'CMP-104', project:'Orchid Square', locality:'Sector 62, Noida', client:'Halden Realty', channel:'Portal listing', rera:'',
+    highlights:['retail frontage on the main road'], ageH:26, sinceH:26, dueH:96, state:'needs_info', draft:false, attempts:0,
+    ev:[[0,'sys','system',null,'received','Brief received via form'],[0.1,'sys','system','received','needs_info','Brief incomplete: RERA registration number, at least 3 key features']] }));
+  DB.push(seedOne({ id:'CMP-105', project:'Sunrise Enclave', locality:'Sector 88, Faridabad', client:'Kestrel Estates', channel:'Brochure (8 pages)', rera:'HRERA-DEMO-3150',
+    highlights:['2 and 3 BHK homes','a landscaped courtyard','a school within 500 metres'], ageH:40, sinceH:30, dueH:44, state:'escalated', attempts:3, bad:true, esc:'AI output failed validation 3 times',
+    ev:[[0,'sys','system',null,'received','Brief received via form'],[0.1,'sys','system','received','drafting','Brief passed validation'],
+      [0.2,'ai','ai','drafting','drafting','AI draft attempt 1 failed: no assured-return claims; rera number appears in the copy',1,false],
+      [0.2,'sys','system','drafting','drafting','Retrying (attempt 2 of 3)'],
+      [0.3,'ai','ai','drafting','drafting','AI draft attempt 2 failed: no assured-return claims; rera number appears in the copy',2,false],
+      [0.3,'sys','system','drafting','drafting','Retrying (attempt 3 of 3)'],
+      [0.4,'ai','ai','drafting','drafting','AI draft attempt 3 failed: no assured-return claims; rera number appears in the copy',3,false],
+      [0.4,'sys','system','drafting','escalated','AI output failed validation 3 times']] }));
+  DB.push(seedOne({ id:'CMP-106', project:'Cedar Park', locality:'Noida Expressway', client:'Halden Realty', channel:'Social carousel (6 cards)', rera:'UPRERA-DEMO-0912',
+    highlights:['2 BHK compact homes','a rooftop terrace','a 5-minute drive to the Aqua Line station'], ageH:216, sinceH:140, dueH:-150, state:'delivered', ev:std('done',{client:10,ready:72,done:76}) }));
+  DB.push(seedOne({ id:'CMP-107', project:'Marigold Heights', locality:'Sohna Road, Gurugram', client:'Northgate Developers', channel:'Portal listing', rera:'HRERA-DEMO-1764',
+    highlights:['3 BHK homes with a study','a podium garden','covered parking for two cars'], ageH:144, sinceH:94, dueH:-90, state:'delivered', ev:std('done',{client:8,ready:36,done:50}) }));
+  DB.push(seedOne({ id:'CMP-108', project:'Ivory Terraces', locality:'Golf Course Road, Gurugram', client:'Kestrel Estates', channel:'Brochure (8 pages)', rera:'HRERA-DEMO-2890',
+    highlights:['4 BHK sky residences','a private lift lobby','views of the Aravalli ridge'], ageH:100, sinceH:60, dueH:-5, state:'review', ev:std('review') }));
+}
+
+/* ---------- metrics ---------- */
+function renderMetrics(){
+  var open = DB.filter(isOpen), done = DB.length - open.length;
+  var wait = open.filter(function(c){ return ['needs_info','review','client','ready','escalated'].indexOf(c.state)>-1; });
+  var oldest = null; wait.forEach(function(c){ if (!oldest || c.stateSince < oldest.stateSince) oldest = c; });
+  var risk = open.filter(isAtRisk), over = open.filter(isOverdue);
+  var first = 0, firstOk = 0;
+  DB.forEach(function(c){ c.log.forEach(function(e){ if (e.kind==='ai' && e.attempt===1){ first++; if (e.ok) firstOk++; } }); });
+  var cycles = DB.filter(function(c){ return c.tReady; }).map(function(c){ return c.tReady - c.created; });
+  var med = median(cycles);
+  var m = [
+    { k:'Open campaigns', v:open.length, n:done+' delivered' },
+    { k:'Waiting on people', v:wait.length, n: oldest ? 'longest: '+oldest.id+', '+dur(now()-oldest.stateSince) : 'nothing waiting' },
+    { k:'Due within 48h', v:risk.length, n: over.length+' already overdue', bad:over.length>0 },
+    { k:'AI first-pass rate', v: first ? Math.round(firstOk/first*100) : 0, unit:'%', n: firstOk+' of '+first+' drafts passed on try one' },
+    { k:'Brief to client approval', v: med==null ? '-' : (med/D).toFixed(1), unit: med==null ? '' : 'days', n:'median of '+cycles.length+' campaigns' }
+  ];
+  $('metrics').innerHTML = m.map(function(x){
+    return '<div class="metric'+(x.bad?' bad':'')+'"><span class="k">'+esc(x.k)+'</span><span class="v">'+esc(x.v)+(x.unit?'<small>'+esc(x.unit)+'</small>':'')+'</span><span class="n">'+esc(x.n)+'</span></div>';
+  }).join('');
+}
+
+/* ---------- views ---------- */
+function pill(s){ var st = STATES[s]; return '<span class="pill tone-'+st.tone+'">'+esc(st.label)+'</span>'; }
+function dueLabel(c){
+  if (c.state==='delivered') return '<span class="due">delivered '+dur(now()-c.stateSince)+' ago</span>';
+  return '<span class="due '+(isOverdue(c)?'bad':isAtRisk(c)?'warn':'')+'">'+fmtRel(c.deadline)+'</span>';
+}
+function cardHTML(c){
+  return '<button type="button" class="card'+(ui.sel===c.id?' sel':'')+'" data-act="select" data-id="'+c.id+'">'+
+    '<div class="card-top"><span class="mono muted">'+c.id+'</span><span class="chip">'+esc(c.channel.replace(/ \(.*\)/,''))+'</span></div>'+
+    '<div class="card-title">'+esc(c.project)+'</div>'+
+    '<div class="card-sub">'+esc(c.client)+(c.locality?' · '+esc(c.locality):'')+'</div>'+
+    '<div class="card-foot">'+dueLabel(c)+(c.revisions?'<span class="mono muted">rev '+c.revisions+'</span>':'')+'</div></button>';
+}
+function viewPipeline(){
+  return '<div class="board">'+BOARD.map(function(s){
+    var items = DB.filter(function(c){ return c.state===s; });
+    return '<section class="col" aria-label="'+esc(STATES[s].label)+'"><div class="col-h"><b>'+esc(STATES[s].label)+'</b><span class="mono muted">'+items.length+'</span></div>'+
+      '<div class="who hint" style="margin-top:-4px;padding:0 2px 4px">'+esc(STATES[s].who)+'</div>'+
+      (items.length ? items.map(cardHTML).join('') : '<div class="col-empty">Nothing here.</div>')+'</section>';
+  }).join('')+'</div>';
+}
+function myItems(){
+  return DB.filter(function(c){ return T.some(function(t){ return t.from===c.state && t.roles.indexOf(ui.role)>-1; }); });
+}
+function viewQueue(){
+  var items = myItems().sort(function(a,b){ return a.deadline-b.deadline; });
+  if (!items.length) return '<div class="empty">Nothing is waiting on the '+esc(ROLES[ui.role].toLowerCase())+'. Switch the role above to see other queues.</div>';
+  return '<div class="list">'+items.map(function(c){
+    var acts = T.filter(function(t){ return t.from===c.state && t.roles.indexOf(ui.role)>-1; }).map(function(t){return t.label;}).join(' · ');
+    return '<button type="button" class="item" data-act="select" data-id="'+c.id+'"><span class="l"><b>'+esc(c.project)+'</b><span class="muted">'+esc(c.client)+' · '+esc(acts)+'</span></span><span class="r">'+pill(c.state)+dueLabel(c)+'</span></button>';
+  }).join('')+'</div>';
+}
+function exceptionsList(){
+  return DB.filter(function(c){ return c.state==='needs_info' || c.state==='escalated' || isAtRisk(c); }).sort(function(a,b){ return a.deadline-b.deadline; });
+}
+function viewExceptions(){
+  var items = exceptionsList();
+  if (!items.length) return '<div class="empty">No exceptions. Every open campaign is on track.</div>';
+  return '<div class="list">'+items.map(function(c){
+    var why = c.state==='needs_info' ? 'Missing: '+checkBrief(c).join(', ') :
+      c.state==='escalated' ? c.escReason :
+      isOverdue(c) ? 'Past its deadline and still in '+STATES[c.state].label.toLowerCase()+'. Run the deadline sweep to escalate.' :
+      'Deadline is inside 48 hours.';
+    return '<button type="button" class="item" data-act="select" data-id="'+c.id+'"><span class="l"><b>'+esc(c.project)+'</b><span class="muted">'+esc(why)+'</span></span><span class="r">'+pill(c.state)+dueLabel(c)+'</span></button>';
+  }).join('')+'</div>';
+}
+function logRows(entries, withCampaign){
+  return entries.map(function(e){
+    return '<li><span class="t">'+fmtDT(e.t)+'</span><span><span class="a k-'+e.kind+'">'+esc(ROLES[e.actor]||e.actor)+'</span>'+(withCampaign?'<span class="mono muted">'+e.cid+' </span>':'')+esc(e.msg)+
+      (e.from!==e.to && e.from ? '<div class="tr">'+esc(STATES[e.from].label)+' → '+esc(STATES[e.to].label)+'</div>' : (!e.from && e.to ? '<div class="tr">→ '+esc(STATES[e.to].label)+'</div>' : ''))+'</span></li>';
+  }).join('');
+}
+function viewAudit(){
+  var all = [];
+  DB.forEach(function(c){ c.log.forEach(function(e){ if (ui.logFilter==='all' || ui.logFilter===c.id){ var x = {}; for (var k in e) x[k]=e[k]; x.cid = c.id; all.push(x); } }); });
+  all.sort(function(a,b){ return b.t-a.t; });
+  var opts = '<option value="all">All campaigns</option>'+DB.map(function(c){ return '<option value="'+c.id+'"'+(ui.logFilter===c.id?' selected':'')+'>'+c.id+' · '+esc(c.project)+'</option>'; }).join('');
+  var shown = all.slice(0,80);
+  return '<div class="filter"><label for="logf" class="hint">Show</label><select id="logf">'+opts+'</select><span class="hint">'+all.length+' events'+(all.length>80?', latest 80 shown':'')+'</span></div>'+
+    '<div class="panel"><ul class="log" style="gap:0">'+logRows(shown, true)+'</ul></div>';
+}
+function viewRules(){
+  var rows = T.map(function(t){
+    return '<tr><td>'+esc(STATES[t.from].label)+'</td><td>'+esc(t.label)+'</td><td>'+t.roles.map(function(r){return esc(ROLES[r]);}).join(', ')+'</td><td>'+esc(t.guard)+'</td><td>'+esc(STATES[t.to] ? STATES[t.to].label : t.to)+'</td></tr>';
+  }).join('') + SYS_RULES.map(function(r){
+    return '<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td><td>System</td><td>'+esc(r[2])+'</td><td>'+esc(r[3])+'</td></tr>';
+  }).join('');
+  return '<div class="two" style="margin-bottom:14px">'+
+    '<div class="panel"><h3>Deterministic code</h3><ul><li>State transitions and who may trigger them</li><li>Brief validation and duplicate detection</li><li>Copy checks: length, RERA number, assured-return claims</li><li>Deadlines, escalation, retry limit of 3, idempotent delivery</li></ul></div>'+
+    '<div class="panel"><h3>AI capability (simulated here)</h3><ul><li>Drafts listing copy as structured output</li><li>Output is validated before anyone sees it</li><li>Cannot approve, deliver, edit permissions or skip a state</li></ul></div>'+
+    '<div class="panel"><h3>Human accountability</h3><ul><li>Internal approval before the client sees anything</li><li>Client approval before delivery</li><li>Exceptions land with the account manager</li></ul></div></div>'+
+    '<div class="tw"><table><thead><tr><th>From</th><th>Action</th><th>Allowed for</th><th>Guard</th><th>Result</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="panel" style="margin-top:14px"><h3>Permission test</h3><p class="hint" style="margin:0">Try to make the AI approve a draft. The action is blocked by code, and the attempt is written to the audit log.</p>'+
+    '<div class="actions"><button class="btn danger" type="button" data-act="aiself">Attempt AI self-approval</button></div></div>';
+}
+
+/* ---------- detail ---------- */
+function stepperHTML(c){
+  var cur = c.state==='escalated' ? STEP_OF[c.prevState || 'drafting'] : STEP_OF[c.state];
+  return '<ol class="stepper">'+STEPS.map(function(s,i){
+    var cls = i<cur ? 'done' : i===cur ? (c.state==='escalated'?'stuck':'cur') : '';
+    return '<li class="'+cls+'">'+esc(s)+'</li>';
+  }).join('')+'</ol>';
+}
+function detailHTML(c){
+  var role = ui.role, acts = T.filter(function(t){ return t.from===c.state; });
+  var canEdit = c.state==='review' && (role==='am' || role==='cw') && c.draft;
+  var needNote = acts.some(function(t){ return t.note && t.roles.indexOf(role)>-1; });
+  var h = '<div class="panel">';
+  h += '<div class="row-head"><div><span class="mono muted">'+c.id+'</span><h2>'+esc(c.project)+'</h2></div><div style="display:flex;gap:8px;align-items:center">'+pill(c.state)+'<button class="btn" type="button" data-act="close" aria-label="Close detail">Close</button></div></div>';
+  h += stepperHTML(c);
+  if (c.state==='escalated') h += '<div class="sec"><span class="pill tone-crit" style="align-self:flex-start">Reason</span><span>'+esc(c.escReason||'')+'</span></div>';
+  h += '<div class="sec"><h3>Brief</h3><dl><dt>Client</dt><dd>'+esc(c.client)+'</dd><dt>Locality</dt><dd>'+(c.locality?esc(c.locality):'<span class="muted">missing</span>')+'</dd><dt>Channel</dt><dd>'+esc(c.channel)+'</dd>'+
+    '<dt>RERA no.</dt><dd class="mono">'+(c.rera?esc(c.rera):'<span class="muted">missing</span>')+'</dd><dt>Deadline</dt><dd>'+fmtDT(c.deadline)+' · '+dueLabel(c)+'</dd><dt>Features</dt><dd>'+(c.highlights.length?esc(c.highlights.join('; ')):'<span class="muted">none</span>')+'</dd></dl></div>';
+
+  if (c.draft){
+    h += '<div class="sec"><h3>Draft '+(c.draft.source==='human'?'(edited by a person)':'(AI, simulated, attempt '+c.aiAttempts+' of '+MAX_ATTEMPTS+')')+'</h3>';
+    if (canEdit){
+      h += '<div class="field"><label for="ed-h">Headline</label><input type="text" id="ed-h" value="'+esc(c.draft.headline)+'"></div>'+
+           '<div class="field"><label for="ed-b">Body</label><textarea id="ed-b" rows="7">'+esc(c.draft.body)+'</textarea></div>'+
+           '<div class="hint">The disclaimer is generated from the brief and cannot be edited: '+esc(c.draft.disclaimer)+'</div>'+
+           '<div class="actions"><button class="btn" type="button" data-act="saveedit" data-id="'+c.id+'">Save edit and re-check</button></div>';
+    } else {
+      h += '<div class="draft"><div class="hl">'+esc(c.draft.headline)+'</div><p>'+(c.draft.body?esc(c.draft.body):'<span class="muted">Empty. A person needs to write the copy.</span>')+'</p><div class="disc">'+esc(c.draft.disclaimer)+'</div></div>';
+    }
+    h += '<details><summary>Structured output (campaign_copy.v1)</summary><pre class="code">'+esc(JSON.stringify({ schema:'campaign_copy.v1', headline:c.draft.headline, body:c.draft.body, highlights:c.draft.highlights, disclaimer:c.draft.disclaimer }, null, 2))+'</pre></details></div>';
+    h += '<div class="sec"><h3>Copy checks</h3><ul class="checks">'+c.checks.map(function(x){
+      return '<li><span class="mark '+(x.ok?'ok':'bad')+'" aria-hidden="true">'+(x.ok?'✓':'×')+'</span><span>'+esc(x.label)+' <span class="sr-only"></span><div class="d">'+(x.ok?'pass':'fail')+' · '+esc(x.detail)+'</div></span></li>';
+    }).join('')+'</ul></div>';
+  }
+
+  /* actions */
+  h += '<div class="sec"><h3>Actions</h3>';
+  if (!acts.length) h += '<div class="hint">This campaign is complete. No further actions.</div>';
+  if (c.state==='needs_info'){
+    var miss = checkBrief(c);
+    h += '<div class="hint">Missing: '+esc(miss.join(', '))+'</div>';
+    if (!c.locality.trim()) h += '<div class="field"><label for="fx-loc">Locality</label><input type="text" id="fx-loc"></div>';
+    if (!c.rera.trim() || c.rera.trim().length<8) h += '<div class="field"><label for="fx-rera">RERA registration number</label><input type="text" id="fx-rera" placeholder="e.g. UPRERA-DEMO-2001"></div>';
+    if (c.highlights.length<3) h += '<div class="field"><label for="fx-hl">Key features, comma separated</label><textarea id="fx-hl" rows="2">'+esc(c.highlights.join(', '))+'</textarea></div>';
+  }
+  if (needNote) h += '<div class="field"><label for="note">Note for the redraft (required to request changes)</label><input type="text" id="note" placeholder="e.g. mention the park earlier"></div>';
+  if (acts.length){
+    h += '<div class="actions">'+acts.filter(function(t){ return !(t.action==='resume' && !c.prevState); }).map(function(t){
+      var allowed = t.roles.indexOf(role)>-1;
+      var primary = allowed && (t.action==='approve_internal'||t.action==='client_approve'||t.action==='deliver'||t.action==='supply_info');
+      return '<button type="button" class="btn'+(primary?' primary':'')+'" data-act="do" data-id="'+c.id+'" data-action="'+t.action+'"'+(allowed?'':' disabled')+' title="'+(allowed?esc(t.guard):'Only '+esc(t.roles.map(function(r){return ROLES[r];}).join(' or '))+' can do this')+'">'+esc(t.label)+'</button>';
+    }).join('')+'</div>';
+    var anyAllowed = acts.some(function(t){ return t.roles.indexOf(role)>-1; });
+    if (!anyAllowed) h += '<div class="hint">Waiting on '+esc(acts[0].roles.map(function(r){return ROLES[r].toLowerCase();}).join(' or '))+'. Switch the role at the top to act.</div>';
+    if (c.checks.length && !c.checks.every(function(x){return x.ok;}) && (c.state==='review'||c.state==='client')) h += '<div class="hint">Approval is blocked until every copy check passes.</div>';
+  }
+  h += '</div>';
+
+  /* trail */
+  var entries = c.log.slice().sort(function(a,b){ return b.t-a.t; });
+  h += '<div class="sec"><h3>Audit trail</h3><ul class="log">'+logRows(entries,false)+'</ul></div>';
+  return h+'</div>';
+}
+
+/* ---------- render ---------- */
+function renderTabs(){
+  var defs = [
+    ['pipeline','Pipeline',null],['queue','My queue',myItems().length],['exceptions','Exceptions',exceptionsList().length],['audit','Audit log',null],['rules','Rules',null]
+  ];
+  $('tabs').innerHTML = defs.map(function(d){
+    return '<button type="button" class="tab" role="tab" aria-selected="'+(ui.tab===d[0])+'" data-act="tab" data-tab="'+d[0]+'">'+d[1]+(d[2]!=null?'<span class="count">'+d[2]+'</span>':'')+'</button>';
+  }).join('');
+}
+function renderView(){
+  var f = { pipeline:viewPipeline, queue:viewQueue, exceptions:viewExceptions, audit:viewAudit, rules:viewRules }[ui.tab];
+  $('view').innerHTML = f();
+  var lf = $('logf'); if (lf) lf.addEventListener('change', function(){ ui.logFilter = lf.value; renderView(); });
+}
+function renderDetail(){
+  var c = ui.sel ? byId(ui.sel) : null, el = $('detail');
+  if (!c){ el.hidden = true; $('ws').classList.remove('has-detail'); el.innerHTML = ''; return; }
+  var keep = document.activeElement && document.activeElement.id;
+  el.hidden = false; $('ws').classList.add('has-detail'); el.innerHTML = detailHTML(c);
+}
+function renderAll(){ renderMetrics(); renderTabs(); renderView(); renderDetail(); }
+
+/* ---------- events ---------- */
+document.addEventListener('click', function(ev){
+  var el = ev.target.closest('[data-act]'); if (!el) return;
+  var act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
+  switch (act){
+    case 'select': ui.sel = id; renderAll(); if (window.innerWidth <= 1040) $('detail').scrollIntoView({ behavior:'smooth', block:'start' }); break;
+    case 'close': ui.sel = null; renderAll(); break;
+    case 'tab': ui.tab = el.getAttribute('data-tab'); renderAll(); break;
+    case 'sweep': sweep(); break;
+    case 'reset': seed(); ui.sel = null; renderAll(); toast('Demo data reset.'); break;
+    case 'newbrief': openForm(); break;
+    case 'closeform': $('dlg').hidden = true; break;
+    case 'saveedit': saveEdit(id, $('ed-h').value, $('ed-b').value); break;
+    case 'do': {
+      var p = {}, n = $('note'), a = el.getAttribute('data-action');
+      if (n) p.note = n.value;
+      if (a==='supply_info'){ var l = $('fx-loc'), r = $('fx-rera'), hl = $('fx-hl'); if (l) p.locality = l.value; if (r) p.rera = r.value; if (hl) p.highlights = hl.value; }
+      perform(id, a, ui.role, p); break;
+    }
+    case 'aiself': {
+      var target = null; DB.forEach(function(c){ if (c.state==='review' && !target) target = c; });
+      if (!target){ toast('No campaign is in internal review right now.'); break; }
+      perform(target.id, 'approve_internal', 'ai', {}); ui.tab = 'audit'; ui.logFilter = target.id; renderAll(); break;
+    }
+  }
+});
+$('role').addEventListener('change', function(e){ ui.role = e.target.value; renderAll(); });
+$('aimode').addEventListener('change', function(e){ ui.aiMode = e.target.value; toast('New AI drafts will use: '+e.target.options[e.target.selectedIndex].text.toLowerCase()+'.'); });
+function openForm(){
+  $('form-err').textContent = '';
+  var cl = {}; DB.forEach(function(c){ cl[c.client] = 1; });
+  $('clients').innerHTML = Object.keys(cl).map(function(n){ return '<option value="'+esc(n)+'">'; }).join('');
+  var d = new Date(now()+5*D); var pad = function(n){ return String(n).padStart(2,'0'); };
+  $('f-deadline').value = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  $('dlg').hidden = false; $('f-project').focus();
+}
+$('briefform').addEventListener('submit', function(e){
+  e.preventDefault();
+  var err = createBrief({ project:$('f-project').value, client:$('f-client').value, channel:$('f-channel').value, locality:$('f-locality').value, rera:$('f-rera').value, deadline:$('f-deadline').value, highlights:$('f-highlights').value });
+  if (err){ $('form-err').textContent = err; return; }
+  $('dlg').hidden = true; $('briefform').reset(); renderAll();
+  var c = byId(ui.sel); toast(c.id+' created and now in '+STATES[c.state].label.toLowerCase()+'.');
+});
+document.addEventListener('keydown', function(e){ if (e.key==='Escape' && !$('dlg').hidden) $('dlg').hidden = true; });
+
+seed(); renderAll();
+})();
+</script>
+
+</body></html>
